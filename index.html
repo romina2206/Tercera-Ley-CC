@@ -1,60 +1,292 @@
 <!DOCTYPE html>
-<html lang="en">
-
+<html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link href="./css/style.css" rel="stylesheet">
-    <title>PizzaFront</title>
+<meta charset="UTF-8">
+<title>3ª Ley: Acción y Reacción</title>
+<style>
+  body { margin: 0; font-family: 'Segoe UI', sans-serif; background: #f7f7f7; overflow: hidden; }
+  
+  #ui-container {
+    position: absolute; top: 20px; left: 20px; z-index: 10;
+    display: flex; flex-direction: column; gap: 10px; width: 320px;
+  }
+
+  .ui-panel {
+    background: rgba(255, 255, 255, 0.95); padding: 15px;
+    border-radius: 10px; box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+  }
+
+  h2 { margin: 0 0 10px 0; color: #5A2382; font-size: 18px; }
+  label { display: block; font-weight: bold; margin-bottom: 5px; font-size: 14px; }
+  input[type=range] { width: 100%; cursor: pointer; margin-bottom: 10px; }
+  
+  .val-display { float: right; font-weight: bold; }
+  .rojo { color: #D32F2F; }
+  .azul { color: #1976D2; }
+
+  button {
+    width: 100%; padding: 12px; background: #E6500F; color: white;
+    border: none; border-radius: 6px; font-size: 16px; cursor: pointer; font-weight: bold;
+    margin-top: 10px;
+  }
+  button:hover { background: #c9420a; }
+
+  /* Panel de datos */
+  .data-row { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 5px; }
+  .force-tag { background: #eee; padding: 2px 5px; border-radius: 4px; font-family: monospace; }
+</style>
+
+<script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+</script>
 </head>
 
 <body>
-    <header>
-        <nav class="barraSuperior">
-            <img class=logoPrincipal src="./img/Logo.png" alt="logo">
 
-            <div class="enlaces">
-                <p>Home</p>
-                <p>Ranking</p>
-                <p>Promoción</p>
-                <p>Contacto</p>
-            </div>
-        </nav>
-    </header>
-    <main>
-        <section>
-            <div class="primerCard">
+<div id="ui-container">
+  
+  <div class="ui-panel">
+    <h2>Configuración de Masas</h2>
+    
+    <label class="rojo">Masa Objeto A (Rojo) <span id="val-mass-a" class="val-display">1 kg</span></label>
+    <input type="range" id="slider-mass-a" min="1" max="10" step="1" value="2">
 
-                <h1 class="textoColor">Envio gratis <span> comprando </span> 2 pizzas</h1>
-            </div>
+    <label class="azul">Masa Objeto B (Azul) <span id="val-mass-b" class="val-display">1 kg</span></label>
+    <input type="range" id="slider-mass-b" min="1" max="10" step="1" value="1">
 
-            <div class="segundaCard">
-                <img class="torta" src="./img/PizzaFalling.jpg" alt="tortaPizza">
+    <p style="font-size:12px; color:#666;">El Rojo empujará al Azul con una fuerza constante de 50N.</p>
 
-                <h2 class="podio">Podio de pizzas</h2>
-                <h3 class="top5">Pizzas top 5</h3>
-                <ol class="sabores">
-                    <li>Muzzarella</li>
-                    <li>Hawaiana</li>
-                    <li>Muzzarella J&Morron</li>
-                    <li>Fugazzeta</li>
-                    <li>Calabresa</li>
-                </ol>
-            </div>
-        </section>
-    </main>
-    <footer>
-        <img class=pizzaFinal src="./img/Logo.png" alt="logoFinal">
-        <nav class="barraInferior">
-            <div class="barraAbajo">
-                <p>Home</p>
-                <p>Contacto</p>
-                <p>Ranking</p>
-                <p>Promoción</p>
-            </div>
-        </nav>
-    </footer>
+    <button id="btn-action">¡Acción (Empujar)!</button>
+  </div>
+
+  <div class="ui-panel">
+    <h2>Análisis Físico</h2>
+    
+    <div class="data-row">
+      <span>Fuerza en A (Reacción):</span>
+      <span class="force-tag rojo">⬅ 50 N</span>
+    </div>
+    <div class="data-row">
+      <span>Aceleración A:</span>
+      <span id="acc-a" class="val-display rojo">0 m/s²</span>
+    </div>
+    <hr>
+    <div class="data-row">
+      <span>Fuerza en B (Acción):</span>
+      <span class="force-tag azul">➡ 50 N</span>
+    </div>
+    <div class="data-row">
+      <span>Aceleración B:</span>
+      <span id="acc-b" class="val-display azul">0 m/s²</span>
+    </div>
+  </div>
+
+</div>
+
+<script type="module">
+  import * as THREE from 'three';
+  import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+  let scene, camera, renderer, controls;
+  let cubeA, cubeB; // Los dos objetos
+  let arrowA, arrowB; // Las flechas de fuerza
+  
+  // Parámetros Físicos
+  let massA = 2;
+  let massB = 1;
+  const FORCE_MAGNITUDE = 50; // Fuerza del empuje en Newtons
+  
+  let velA = 0;
+  let velB = 0;
+  let isMoving = false;
+
+  // UI Elements
+  const sliderA = document.getElementById('slider-mass-a');
+  const sliderB = document.getElementById('slider-mass-b');
+  const valA = document.getElementById('val-mass-a');
+  const valB = document.getElementById('val-mass-b');
+  const dispAccA = document.getElementById('acc-a');
+  const dispAccB = document.getElementById('acc-b');
+
+  init();
+  animate();
+
+  function init() {
+    scene = new THREE.Scene();
+    scene.background = new THREE.Color(0xf0f0f0);
+    
+    // Cámara
+    camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 100);
+    camera.position.set(0, 8, 18);
+    camera.lookAt(0, 0, 0);
+
+    renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
+
+    controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+
+    // Luces
+    scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+    const light = new THREE.DirectionalLight(0xffffff, 0.8);
+    light.position.set(0, 10, 5);
+    scene.add(light);
+
+    // Piso
+    const floor = new THREE.Mesh(
+        new THREE.PlaneGeometry(60, 40), 
+        new THREE.MeshStandardMaterial({ color: 0xcccccc })
+    );
+    floor.rotation.x = -Math.PI / 2;
+    floor.position.y = -0.5;
+    scene.add(floor);
+    
+    // Grid
+    scene.add(new THREE.GridHelper(60, 60, 0xaaaaaa, 0xdddddd));
+
+    // --- OBJETOS ---
+    
+    // Cubo A (ROJO - Izquierda)
+    cubeA = createCube(0xD32F2F, -0.55); // Un poco a la izquierda del centro
+    
+    // Cubo B (AZUL - Derecha)
+    cubeB = createCube(0x1976D2, 0.55);  // Un poco a la derecha del centro
+
+    // --- FLECHAS DE FUERZA ---
+    // Flecha Roja (Reacción hacia la izquierda)
+    arrowA = new THREE.ArrowHelper(new THREE.Vector3(-1,0,0), new THREE.Vector3(0,0,0), 3, 0xD32F2F, 0.6, 0.4);
+    
+    // Flecha Azul (Acción hacia la derecha)
+    arrowB = new THREE.ArrowHelper(new THREE.Vector3(1,0,0), new THREE.Vector3(0,0,0), 3, 0x1976D2, 0.6, 0.4);
+
+    scene.add(arrowA);
+    scene.add(arrowB);
+
+    // Listeners
+    sliderA.addEventListener('input', updateParams);
+    sliderB.addEventListener('input', updateParams);
+    document.getElementById('btn-action').addEventListener('click', empujar);
+    window.addEventListener("resize", onResize);
+
+    resetSim();
+    updateParams();
+  }
+
+  function createCube(color, xPos) {
+    const mesh = new THREE.Mesh(
+        new THREE.BoxGeometry(1, 1, 1),
+        new THREE.MeshStandardMaterial({ color: color })
+    );
+    mesh.position.set(xPos, 0, 0);
+    scene.add(mesh);
+    return mesh;
+  }
+
+  function updateParams() {
+    massA = parseFloat(sliderA.value);
+    massB = parseFloat(sliderB.value);
+    
+    valA.innerText = massA + " kg";
+    valB.innerText = massB + " kg";
+
+    // Visual: Escalar cubos según su masa
+    const sA = 0.8 + (massA * 0.15);
+    const sB = 0.8 + (massB * 0.15);
+    
+    cubeA.scale.set(sA, sA, sA);
+    cubeB.scale.set(sB, sB, sB);
+    
+    // Ajustar altura para que toquen el piso
+    if (!isMoving) {
+        cubeA.position.y = (sA / 2) - 0.5; 
+        cubeB.position.y = (sB / 2) - 0.5;
+        
+        // Mantenerlos pegados al centro
+        cubeA.position.x = -sA / 2 - 0.05; 
+        cubeB.position.x = sB / 2 + 0.05;
+        
+        // Calcular aceleraciones teóricas para mostrar en panel
+        const accA = (FORCE_MAGNITUDE / massA).toFixed(2);
+        const accB = (FORCE_MAGNITUDE / massB).toFixed(2);
+        
+        dispAccA.innerText = accA + " m/s²";
+        dispAccB.innerText = accB + " m/s²";
+    }
+  }
+
+  function resetSim() {
+    velA = 0;
+    velB = 0;
+    isMoving = false;
+    arrowA.visible = false;
+    arrowB.visible = false;
+    updateParams(); // Resetea posiciones
+  }
+
+  function empujar() {
+    resetSim();
+    isMoving = true;
+
+    // --- FÍSICA 3ª LEY ---
+    // La fuerza es la misma para ambos (50N), pero en direcciones opuestas.
+    
+    // Aceleración = Fuerza / Masa
+    const accA = FORCE_MAGNITUDE / massA; 
+    const accB = FORCE_MAGNITUDE / massB;
+    
+    // Velocidad inicial (Impulso)
+    // El Rojo se mueve a la IZQUIERDA (negativo)
+    velA = -accA * 0.02; 
+    
+    // El Azul se mueve a la DERECHA (positivo)
+    velB = accB * 0.02;
+
+    // Mostrar flechas de fuerza momentáneamente
+    arrowA.position.copy(cubeA.position);
+    arrowB.position.copy(cubeB.position);
+    arrowA.visible = true;
+    arrowB.visible = true;
+
+    // Ocultar flechas después de 0.5 segundos (el empuje es instantáneo)
+    setTimeout(() => {
+        arrowA.visible = false;
+        arrowB.visible = false;
+    }, 600);
+  }
+
+  function animate() {
+    requestAnimationFrame(animate);
+
+    if (isMoving) {
+        cubeA.position.x += velA;
+        cubeB.position.x += velB;
+
+        // Fricción suave para que no se vayan al infinito
+        velA *= 0.98;
+        velB *= 0.98;
+
+        // Si se detienen casi por completo
+        if(Math.abs(velA) < 0.001 && Math.abs(velB) < 0.001) {
+            isMoving = false;
+        }
+    }
+
+    controls.update();
+    renderer.render(scene, camera);
+  }
+
+  function onResize() {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  }
+</script>
+
 </body>
-
 </html>
