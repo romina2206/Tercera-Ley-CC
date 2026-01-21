@@ -2,13 +2,13 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<title>3ª Ley: Acción y Reacción</title>
+<title>3ª Ley: Choque y Reacción</title>
 <style>
   body { margin: 0; font-family: 'Segoe UI', sans-serif; background: #f7f7f7; overflow: hidden; }
   
   #ui-container {
     position: absolute; top: 20px; left: 20px; z-index: 10;
-    display: flex; flex-direction: column; gap: 10px; width: 320px;
+    display: flex; flex-direction: column; gap: 10px; width: 300px;
   }
 
   .ui-panel {
@@ -31,9 +31,9 @@
   }
   button:hover { background: #c9420a; }
 
-  /* Panel de datos */
-  .data-row { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 5px; }
-  .force-tag { background: #eee; padding: 2px 5px; border-radius: 4px; font-family: monospace; }
+  #collision-status {
+      text-align: center; font-weight: bold; margin-top: 10px; min-height: 20px;
+  }
 </style>
 
 <script type="importmap">
@@ -52,37 +52,25 @@
   
   <div class="ui-panel">
     <h2>Configuración de Masas</h2>
+    <p style="font-size:12px; color:#555;">El Rojo golpeará al Azul.</p>
     
-    <label class="rojo">Masa Objeto A (Rojo) <span id="val-mass-a" class="val-display">1 kg</span></label>
-    <input type="range" id="slider-mass-a" min="1" max="10" step="1" value="2">
+    <label class="rojo">Masa Atacante (A) <span id="val-mass-a" class="val-display">1 kg</span></label>
+    <input type="range" id="slider-mass-a" min="1" max="10" step="1" value="1">
 
-    <label class="azul">Masa Objeto B (Azul) <span id="val-mass-b" class="val-display">1 kg</span></label>
+    <label class="azul">Masa Objetivo (B) <span id="val-mass-b" class="val-display">1 kg</span></label>
     <input type="range" id="slider-mass-b" min="1" max="10" step="1" value="1">
+    
+    <label>Velocidad Inicial A</label>
+    <input type="range" id="slider-vel" min="10" max="30" value="20">
 
-    <p style="font-size:12px; color:#666;">El Rojo empujará al Azul con una fuerza constante de 50N.</p>
-
-    <button id="btn-action">¡Acción (Empujar)!</button>
+    <button id="btn-lanzar">¡Lanzar Choque!</button>
   </div>
 
   <div class="ui-panel">
-    <h2>Análisis Físico</h2>
-    
-    <div class="data-row">
-      <span>Fuerza en A (Reacción):</span>
-      <span class="force-tag rojo">⬅ 50 N</span>
-    </div>
-    <div class="data-row">
-      <span>Aceleración A:</span>
-      <span id="acc-a" class="val-display rojo">0 m/s²</span>
-    </div>
-    <hr>
-    <div class="data-row">
-      <span>Fuerza en B (Acción):</span>
-      <span class="force-tag azul">➡ 50 N</span>
-    </div>
-    <div class="data-row">
-      <span>Aceleración B:</span>
-      <span id="acc-b" class="val-display azul">0 m/s²</span>
+    <div id="collision-status">Esperando lanzamiento...</div>
+    <div style="margin-top:10px; font-size:12px;">
+       <div>Velocidad A: <span id="vel-a-disp">0</span></div>
+       <div>Velocidad B: <span id="vel-b-disp">0</span></div>
     </div>
   </div>
 
@@ -93,25 +81,23 @@
   import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
   let scene, camera, renderer, controls;
-  let cubeA, cubeB; // Los dos objetos
-  let arrowA, arrowB; // Las flechas de fuerza
+  let cubeA, cubeB;
+  let arrowForceA, arrowForceB; // Flechas de acción/reacción
   
-  // Parámetros Físicos
-  let massA = 2;
+  // Física
+  let massA = 1;
   let massB = 1;
-  const FORCE_MAGNITUDE = 50; // Fuerza del empuje en Newtons
-  
   let velA = 0;
   let velB = 0;
-  let isMoving = false;
+  let initVelA = 0.2;
+  
+  let isSimulating = false;
+  let hasCollided = false;
 
-  // UI Elements
-  const sliderA = document.getElementById('slider-mass-a');
-  const sliderB = document.getElementById('slider-mass-b');
-  const valA = document.getElementById('val-mass-a');
-  const valB = document.getElementById('val-mass-b');
-  const dispAccA = document.getElementById('acc-a');
-  const dispAccB = document.getElementById('acc-b');
+  const sliderMassA = document.getElementById('slider-mass-a');
+  const sliderMassB = document.getElementById('slider-mass-b');
+  const sliderVel = document.getElementById('slider-vel');
+  const statusDiv = document.getElementById('collision-status');
 
   init();
   animate();
@@ -120,161 +106,170 @@
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0xf0f0f0);
     
-    // Cámara
     camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 100);
-    camera.position.set(0, 8, 18);
-    camera.lookAt(0, 0, 0);
-
+    camera.position.set(0, 8, 20);
+    
     renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
     document.body.appendChild(renderer.domElement);
 
     controls = new OrbitControls(camera, renderer.domElement);
-    controls.enableDamping = true;
 
-    // Luces
     scene.add(new THREE.AmbientLight(0xffffff, 0.6));
     const light = new THREE.DirectionalLight(0xffffff, 0.8);
-    light.position.set(0, 10, 5);
+    light.position.set(5, 10, 5);
     scene.add(light);
 
-    // Piso
-    const floor = new THREE.Mesh(
-        new THREE.PlaneGeometry(60, 40), 
-        new THREE.MeshStandardMaterial({ color: 0xcccccc })
-    );
+    // Piso y Grid
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(60, 20), new THREE.MeshStandardMaterial({ color: 0xcccccc }));
     floor.rotation.x = -Math.PI / 2;
     floor.position.y = -0.5;
     scene.add(floor);
-    
-    // Grid
-    scene.add(new THREE.GridHelper(60, 60, 0xaaaaaa, 0xdddddd));
+    scene.add(new THREE.GridHelper(60, 20));
 
-    // --- OBJETOS ---
-    
-    // Cubo A (ROJO - Izquierda)
-    cubeA = createCube(0xD32F2F, -0.55); // Un poco a la izquierda del centro
-    
-    // Cubo B (AZUL - Derecha)
-    cubeB = createCube(0x1976D2, 0.55);  // Un poco a la derecha del centro
+    // Crear Cubos
+    cubeA = createCube(0xD32F2F); // Rojo
+    cubeB = createCube(0x1976D2); // Azul
 
-    // --- FLECHAS DE FUERZA ---
-    // Flecha Roja (Reacción hacia la izquierda)
-    arrowA = new THREE.ArrowHelper(new THREE.Vector3(-1,0,0), new THREE.Vector3(0,0,0), 3, 0xD32F2F, 0.6, 0.4);
+    // Crear Flechas de Choque (Inicialmente invisibles)
+    // Flecha Roja: Fuerza que recibe A (hacia izquierda)
+    arrowForceA = new THREE.ArrowHelper(new THREE.Vector3(-1,0,0), new THREE.Vector3(0,0,0), 2, 0xD32F2F, 0.8, 0.6);
+    // Flecha Azul: Fuerza que recibe B (hacia derecha)
+    arrowForceB = new THREE.ArrowHelper(new THREE.Vector3(1,0,0), new THREE.Vector3(0,0,0), 2, 0x1976D2, 0.8, 0.6);
     
-    // Flecha Azul (Acción hacia la derecha)
-    arrowB = new THREE.ArrowHelper(new THREE.Vector3(1,0,0), new THREE.Vector3(0,0,0), 3, 0x1976D2, 0.6, 0.4);
+    arrowForceA.visible = false;
+    arrowForceB.visible = false;
+    scene.add(arrowForceA);
+    scene.add(arrowForceB);
 
-    scene.add(arrowA);
-    scene.add(arrowB);
-
-    // Listeners
-    sliderA.addEventListener('input', updateParams);
-    sliderB.addEventListener('input', updateParams);
-    document.getElementById('btn-action').addEventListener('click', empujar);
+    // Eventos
+    sliderMassA.addEventListener('input', updateParams);
+    sliderMassB.addEventListener('input', updateParams);
+    sliderVel.addEventListener('input', updateParams);
+    document.getElementById('btn-lanzar').addEventListener('click', startSimulation);
     window.addEventListener("resize", onResize);
 
-    resetSim();
+    resetPositions();
     updateParams();
   }
 
-  function createCube(color, xPos) {
-    const mesh = new THREE.Mesh(
-        new THREE.BoxGeometry(1, 1, 1),
-        new THREE.MeshStandardMaterial({ color: color })
+  function createCube(color) {
+    return new THREE.Mesh(
+      new THREE.BoxGeometry(1, 1, 1),
+      new THREE.MeshStandardMaterial({ color: color })
     );
-    mesh.position.set(xPos, 0, 0);
-    scene.add(mesh);
-    return mesh;
   }
 
   function updateParams() {
-    massA = parseFloat(sliderA.value);
-    massB = parseFloat(sliderB.value);
-    
-    valA.innerText = massA + " kg";
-    valB.innerText = massB + " kg";
+    massA = parseFloat(sliderMassA.value);
+    massB = parseFloat(sliderMassB.value);
+    initVelA = parseFloat(sliderVel.value) / 100; // Escalar valor
 
-    // Visual: Escalar cubos según su masa
+    document.getElementById('val-mass-a').innerText = massA + " kg";
+    document.getElementById('val-mass-b').innerText = massB + " kg";
+
+    // Tamaño visual basado en masa
     const sA = 0.8 + (massA * 0.15);
     const sB = 0.8 + (massB * 0.15);
     
     cubeA.scale.set(sA, sA, sA);
     cubeB.scale.set(sB, sB, sB);
     
-    // Ajustar altura para que toquen el piso
-    if (!isMoving) {
-        cubeA.position.y = (sA / 2) - 0.5; 
-        cubeB.position.y = (sB / 2) - 0.5;
-        
-        // Mantenerlos pegados al centro
-        cubeA.position.x = -sA / 2 - 0.05; 
-        cubeB.position.x = sB / 2 + 0.05;
-        
-        // Calcular aceleraciones teóricas para mostrar en panel
-        const accA = (FORCE_MAGNITUDE / massA).toFixed(2);
-        const accB = (FORCE_MAGNITUDE / massB).toFixed(2);
-        
-        dispAccA.innerText = accA + " m/s²";
-        dispAccB.innerText = accB + " m/s²";
+    if(!isSimulating) {
+        // Ajustar posición Y para que toquen el suelo
+        cubeA.position.y = (sA/2) - 0.5;
+        cubeB.position.y = (sB/2) - 0.5;
     }
   }
 
-  function resetSim() {
+  function resetPositions() {
+    isSimulating = false;
+    hasCollided = false;
     velA = 0;
     velB = 0;
-    isMoving = false;
-    arrowA.visible = false;
-    arrowB.visible = false;
-    updateParams(); // Resetea posiciones
+    arrowForceA.visible = false;
+    arrowForceB.visible = false;
+    
+    cubeA.position.x = -8; // A la izquierda
+    cubeB.position.x = 0;  // En el centro
+    
+    statusDiv.innerText = "Listo para lanzar";
+    statusDiv.style.color = "black";
+    updateParams(); // Asegurar alturas correctas
   }
 
-  function empujar() {
-    resetSim();
-    isMoving = true;
+  function startSimulation() {
+    resetPositions();
+    isSimulating = true;
+    velA = initVelA; // A se mueve
+    velB = 0;        // B está quieto
+    statusDiv.innerText = "¡Moviéndose!";
+  }
 
-    // --- FÍSICA 3ª LEY ---
-    // La fuerza es la misma para ambos (50N), pero en direcciones opuestas.
-    
-    // Aceleración = Fuerza / Masa
-    const accA = FORCE_MAGNITUDE / massA; 
-    const accB = FORCE_MAGNITUDE / massB;
-    
-    // Velocidad inicial (Impulso)
-    // El Rojo se mueve a la IZQUIERDA (negativo)
-    velA = -accA * 0.02; 
-    
-    // El Azul se mueve a la DERECHA (positivo)
-    velB = accB * 0.02;
+  function resolveCollision() {
+    hasCollided = true;
+    statusDiv.innerText = "¡CHOQUE! Acción = Reacción";
+    statusDiv.style.color = "#E6500F";
 
-    // Mostrar flechas de fuerza momentáneamente
-    arrowA.position.copy(cubeA.position);
-    arrowB.position.copy(cubeB.position);
-    arrowA.visible = true;
-    arrowB.visible = true;
+    // 1. Mostrar Flechas de 3ª Ley
+    // Posicionarlas en el punto de contacto
+    const contactPointX = (cubeA.position.x + cubeB.position.x) / 2;
+    const contactPointY = cubeA.position.y + 1; // Un poco arriba
+    
+    arrowForceA.position.set(contactPointX, contactPointY, 0);
+    arrowForceB.position.set(contactPointX, contactPointY, 0);
+    arrowForceA.visible = true;
+    arrowForceB.visible = true;
 
-    // Ocultar flechas después de 0.5 segundos (el empuje es instantáneo)
+    // 2. FÍSICA: Colisión Elástica 1D
+    // Fórmulas de conservación de momento y energía cinética
+    const vA_inicial = velA;
+    const vB_inicial = velB; // es 0, pero lo dejamos por completitud
+
+    const vA_final = ((massA - massB) * vA_inicial + 2 * massB * vB_inicial) / (massA + massB);
+    const vB_final = ((massB - massA) * vB_inicial + 2 * massA * vA_inicial) / (massA + massB);
+
+    velA = vA_final;
+    velB = vB_final;
+
+    // 3. Ocultar flechas después de un momento
     setTimeout(() => {
-        arrowA.visible = false;
-        arrowB.visible = false;
-    }, 600);
+        arrowForceA.visible = false;
+        arrowForceB.visible = false;
+    }, 500);
   }
 
   function animate() {
     requestAnimationFrame(animate);
 
-    if (isMoving) {
+    if (isSimulating) {
+        // Mover
         cubeA.position.x += velA;
         cubeB.position.x += velB;
 
-        // Fricción suave para que no se vayan al infinito
-        velA *= 0.98;
-        velB *= 0.98;
+        // Detectar Colisión
+        // Distancia mínima = mitad del ancho de A + mitad del ancho de B
+        const minDist = (cubeA.scale.x / 2) + (cubeB.scale.x / 2);
+        const dist = cubeB.position.x - cubeA.position.x;
 
-        // Si se detienen casi por completo
-        if(Math.abs(velA) < 0.001 && Math.abs(velB) < 0.001) {
-            isMoving = false;
+        if (dist <= minDist && !hasCollided) {
+            resolveCollision();
+            
+            // Corrección anti-solapamiento (separarlos un pelín para que no se peguen)
+            const overlap = minDist - dist;
+            cubeA.position.x -= overlap / 2;
+            cubeB.position.x += overlap / 2;
         }
+
+        // Fricción posterior al choque (para que paren eventualmente)
+        if(hasCollided) {
+             velA *= 0.99;
+             velB *= 0.99;
+        }
+
+        // Actualizar UI Velocidades
+        document.getElementById('vel-a-disp').innerText = velA.toFixed(3);
+        document.getElementById('vel-b-disp').innerText = velB.toFixed(3);
     }
 
     controls.update();
