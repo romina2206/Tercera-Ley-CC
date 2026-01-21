@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<title>3ª Ley: Choque y Reacción</title>
+<title>3ª Ley: Choque y Reacción (Corregido)</title>
 <style>
   body { margin: 0; font-family: 'Segoe UI', sans-serif; background: #f7f7f7; overflow: hidden; }
   
@@ -51,7 +51,7 @@
 <div id="ui-container">
   
   <div class="ui-panel">
-    <h2>Configuración de Masas</h2>
+    <h2>3ª Ley: Acción y Reacción</h2>
     <p style="font-size:12px; color:#555;">El Rojo golpeará al Azul.</p>
     
     <label class="rojo">Masa Atacante (A) <span id="val-mass-a" class="val-display">1 kg</span></label>
@@ -61,7 +61,7 @@
     <input type="range" id="slider-mass-b" min="1" max="10" step="1" value="1">
     
     <label>Velocidad Inicial A</label>
-    <input type="range" id="slider-vel" min="10" max="30" value="20">
+    <input type="range" id="slider-vel" min="10" max="40" value="20">
 
     <button id="btn-lanzar">¡Lanzar Choque!</button>
   </div>
@@ -82,7 +82,7 @@
 
   let scene, camera, renderer, controls;
   let cubeA, cubeB;
-  let arrowForceA, arrowForceB; // Flechas de acción/reacción
+  let arrowForceA, arrowForceB; 
   
   // Física
   let massA = 1;
@@ -103,39 +103,42 @@
   animate();
 
   function init() {
+    // 1. ESCENA
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0xf0f0f0);
     
+    // 2. CÁMARA (Ajustada para ver todo el escenario)
     camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 100);
-    camera.position.set(0, 8, 20);
+    camera.position.set(0, 10, 25); 
+    camera.lookAt(0, 0, 0);
     
+    // 3. RENDERER
     renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
     document.body.appendChild(renderer.domElement);
 
     controls = new OrbitControls(camera, renderer.domElement);
 
+    // 4. LUCES
     scene.add(new THREE.AmbientLight(0xffffff, 0.6));
     const light = new THREE.DirectionalLight(0xffffff, 0.8);
     light.position.set(5, 10, 5);
     scene.add(light);
 
-    // Piso y Grid
+    // 5. PISO
     const floor = new THREE.Mesh(new THREE.PlaneGeometry(60, 20), new THREE.MeshStandardMaterial({ color: 0xcccccc }));
     floor.rotation.x = -Math.PI / 2;
     floor.position.y = -0.5;
     scene.add(floor);
     scene.add(new THREE.GridHelper(60, 20));
 
-    // Crear Cubos
+    // 6. CUBOS (Aquí estaba el error antes, ahora se añaden correctamente)
     cubeA = createCube(0xD32F2F); // Rojo
     cubeB = createCube(0x1976D2); // Azul
 
-    // Crear Flechas de Choque (Inicialmente invisibles)
-    // Flecha Roja: Fuerza que recibe A (hacia izquierda)
-    arrowForceA = new THREE.ArrowHelper(new THREE.Vector3(-1,0,0), new THREE.Vector3(0,0,0), 2, 0xD32F2F, 0.8, 0.6);
-    // Flecha Azul: Fuerza que recibe B (hacia derecha)
-    arrowForceB = new THREE.ArrowHelper(new THREE.Vector3(1,0,0), new THREE.Vector3(0,0,0), 2, 0x1976D2, 0.8, 0.6);
+    // 7. FLECHAS DE FUERZA (Vectores)
+    arrowForceA = new THREE.ArrowHelper(new THREE.Vector3(-1,0,0), new THREE.Vector3(0,0,0), 3, 0xD32F2F, 1, 0.6);
+    arrowForceB = new THREE.ArrowHelper(new THREE.Vector3(1,0,0), new THREE.Vector3(0,0,0), 3, 0x1976D2, 1, 0.6);
     
     arrowForceA.visible = false;
     arrowForceB.visible = false;
@@ -150,33 +153,34 @@
     window.addEventListener("resize", onResize);
 
     resetPositions();
-    updateParams();
   }
 
+  // CORRECCIÓN IMPORTANTE: Esta función ahora añade el mesh a la escena
   function createCube(color) {
-    return new THREE.Mesh(
+    const mesh = new THREE.Mesh(
       new THREE.BoxGeometry(1, 1, 1),
       new THREE.MeshStandardMaterial({ color: color })
     );
+    scene.add(mesh); // <--- ESTO FALTABA
+    return mesh;
   }
 
   function updateParams() {
     massA = parseFloat(sliderMassA.value);
     massB = parseFloat(sliderMassB.value);
-    initVelA = parseFloat(sliderVel.value) / 100; // Escalar valor
+    initVelA = parseFloat(sliderVel.value) / 100; 
 
     document.getElementById('val-mass-a').innerText = massA + " kg";
     document.getElementById('val-mass-b').innerText = massB + " kg";
 
-    // Tamaño visual basado en masa
     const sA = 0.8 + (massA * 0.15);
     const sB = 0.8 + (massB * 0.15);
     
     cubeA.scale.set(sA, sA, sA);
     cubeB.scale.set(sB, sB, sB);
     
+    // Si no estamos simulando, mantenemos los cubos pegados al suelo
     if(!isSimulating) {
-        // Ajustar posición Y para que toquen el suelo
         cubeA.position.y = (sA/2) - 0.5;
         cubeB.position.y = (sB/2) - 0.5;
     }
@@ -190,19 +194,19 @@
     arrowForceA.visible = false;
     arrowForceB.visible = false;
     
-    cubeA.position.x = -8; // A la izquierda
-    cubeB.position.x = 0;  // En el centro
+    cubeA.position.x = -8; 
+    cubeB.position.x = 0;  
     
     statusDiv.innerText = "Listo para lanzar";
     statusDiv.style.color = "black";
-    updateParams(); // Asegurar alturas correctas
+    updateParams();
   }
 
   function startSimulation() {
     resetPositions();
     isSimulating = true;
-    velA = initVelA; // A se mueve
-    velB = 0;        // B está quieto
+    velA = initVelA; 
+    velB = 0;        
     statusDiv.innerText = "¡Moviéndose!";
   }
 
@@ -211,20 +215,19 @@
     statusDiv.innerText = "¡CHOQUE! Acción = Reacción";
     statusDiv.style.color = "#E6500F";
 
-    // 1. Mostrar Flechas de 3ª Ley
-    // Posicionarlas en el punto de contacto
+    // Posicionar flechas en el punto de contacto
     const contactPointX = (cubeA.position.x + cubeB.position.x) / 2;
-    const contactPointY = cubeA.position.y + 1; // Un poco arriba
+    // Altura visual encima de los cubos
+    const contactPointY = Math.max(cubeA.scale.y, cubeB.scale.y) + 1;
     
     arrowForceA.position.set(contactPointX, contactPointY, 0);
     arrowForceB.position.set(contactPointX, contactPointY, 0);
     arrowForceA.visible = true;
     arrowForceB.visible = true;
 
-    // 2. FÍSICA: Colisión Elástica 1D
-    // Fórmulas de conservación de momento y energía cinética
+    // Fórmulas de colisión elástica
     const vA_inicial = velA;
-    const vB_inicial = velB; // es 0, pero lo dejamos por completitud
+    const vB_inicial = velB;
 
     const vA_final = ((massA - massB) * vA_inicial + 2 * massB * vB_inicial) / (massA + massB);
     const vB_final = ((massB - massA) * vB_inicial + 2 * massA * vA_inicial) / (massA + massB);
@@ -232,42 +235,41 @@
     velA = vA_final;
     velB = vB_final;
 
-    // 3. Ocultar flechas después de un momento
+    // Ocultar flechas después de 0.8 segundos
     setTimeout(() => {
         arrowForceA.visible = false;
         arrowForceB.visible = false;
-    }, 500);
+    }, 800);
   }
 
   function animate() {
     requestAnimationFrame(animate);
 
     if (isSimulating) {
-        // Mover
         cubeA.position.x += velA;
         cubeB.position.x += velB;
 
-        // Detectar Colisión
-        // Distancia mínima = mitad del ancho de A + mitad del ancho de B
+        // Detectar colisión por distancia
+        // (Suma de las mitades de los anchos)
         const minDist = (cubeA.scale.x / 2) + (cubeB.scale.x / 2);
         const dist = cubeB.position.x - cubeA.position.x;
 
         if (dist <= minDist && !hasCollided) {
             resolveCollision();
             
-            // Corrección anti-solapamiento (separarlos un pelín para que no se peguen)
+            // Corrección de superposición
             const overlap = minDist - dist;
             cubeA.position.x -= overlap / 2;
             cubeB.position.x += overlap / 2;
         }
 
-        // Fricción posterior al choque (para que paren eventualmente)
+        // Fricción post-colisión
         if(hasCollided) {
              velA *= 0.99;
              velB *= 0.99;
         }
 
-        // Actualizar UI Velocidades
+        // Actualizar textos de velocidad
         document.getElementById('vel-a-disp').innerText = velA.toFixed(3);
         document.getElementById('vel-b-disp').innerText = velB.toFixed(3);
     }
